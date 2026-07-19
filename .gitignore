@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+dist/
+target/
+.tools/
+.logs/
+.idea/
+.vscode/
+.env
+uploads/
+*.log
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts

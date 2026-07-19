@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: memoris-postgres
+    environment:
+      POSTGRES_DB: memoris_os
+      POSTGRES_USER: memoris
+      POSTGRES_PASSWORD: memoris
+    ports:
+      - "5432:5432"
+    volumes:
+      - memoris_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  memoris_postgres_data:

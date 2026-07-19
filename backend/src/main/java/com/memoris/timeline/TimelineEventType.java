@@ -1,0 +1,11 @@
+package com.memoris.timeline;
+
+public enum TimelineEventType {
+    MEETING_CREATED,
+    AI_SUMMARY_GENERATED,
+    DECISION_ADDED,
+    ACTION_ITEM_ASSIGNED,
+    DOCUMENT_UPLOADED,
+    SEARCH_PERFORMED,
+    AI_ANSWER_GENERATED
+}
