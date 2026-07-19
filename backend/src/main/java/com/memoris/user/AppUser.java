@@ -26,6 +26,11 @@ public class AppUser extends BaseEntity {
         this.passwordHash = passwordHash;
     }
 
+    public void updateDemoProfile(String fullName, String passwordHash) {
+        this.fullName = fullName;
+        this.passwordHash = passwordHash;
+    }
+
     public String getFullName() {
         return fullName;
     }

@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 public interface MeetingRepository extends JpaRepository<Meeting, UUID> {
     List<Meeting> findTop5ByOrganizationIdOrderByCreatedAtDesc(UUID organizationId);
     long countByOrganizationId(UUID organizationId);
+    boolean existsByOrganizationIdAndTitleIgnoreCase(UUID organizationId, String title);
 
     @Query("""
             select m from Meeting m

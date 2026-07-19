@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface OrganizationMemberRepository extends JpaRepository<OrganizationMember, UUID> {
     Optional<OrganizationMember> findFirstByUserOrderByCreatedAtAsc(AppUser user);
+    boolean existsByOrganizationIdAndUserId(UUID organizationId, UUID userId);
 
     @Query("""
             select m from OrganizationMember m

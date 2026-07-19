@@ -22,6 +22,8 @@ import com.memoris.user.AppUser;
 import com.memoris.user.AppUserRepository;
 import java.time.LocalDate;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -31,6 +33,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 @ConditionalOnProperty(prefix = "app.demo", name = "seed-enabled", havingValue = "true")
 public class DemoDataSeeder {
+    private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
+
     @Bean
     CommandLineRunner seedMemorisDemo(
             AppUserRepository userRepository,
@@ -72,19 +76,25 @@ public class DemoDataSeeder {
             TimelineEventRepository timelineEventRepository,
             PasswordEncoder passwordEncoder
     ) {
-        if (organizationRepository.findBySlug(demo.slug()).isPresent()) {
-            return;
-        }
+        log.info("Ensuring demo organization {} exists", demo.slug());
 
-        Organization organization = organizationRepository.save(new Organization(demo.name(), demo.slug()));
+        Organization organization = organizationRepository.findBySlug(demo.slug())
+                .orElseGet(() -> organizationRepository.save(new Organization(demo.name(), demo.slug())));
         AppUser owner = null;
         for (DemoUser demoUser : demo.users()) {
-            AppUser user = userRepository.save(new AppUser(
-                    demoUser.fullName(),
-                    demoUser.email(),
-                    passwordEncoder.encode("password123")
-            ));
-            memberRepository.save(new OrganizationMember(organization, user, demoUser.role(), demoUser.team()));
+            AppUser user = userRepository.findByEmail(demoUser.email())
+                    .map(existing -> {
+                        existing.updateDemoProfile(demoUser.fullName(), passwordEncoder.encode("password123"));
+                        return userRepository.save(existing);
+                    })
+                    .orElseGet(() -> userRepository.save(new AppUser(
+                            demoUser.fullName(),
+                            demoUser.email(),
+                            passwordEncoder.encode("password123")
+                    )));
+            if (!memberRepository.existsByOrganizationIdAndUserId(organization.getId(), user.getId())) {
+                memberRepository.save(new OrganizationMember(organization, user, demoUser.role(), demoUser.team()));
+            }
             if (demoUser.role() == Role.OWNER) {
                 owner = user;
             }
@@ -94,7 +104,12 @@ public class DemoDataSeeder {
             throw new IllegalStateException("Demo organization must include an owner: " + demo.slug());
         }
 
-        Project project = projectRepository.save(new Project(organization, demo.projectName(), demo.team()));
+        Project project = projectRepository.findByOrganizationIdAndNameIgnoreCase(organization.getId(), demo.projectName())
+                .orElseGet(() -> projectRepository.save(new Project(organization, demo.projectName(), demo.team())));
+        if (meetingRepository.existsByOrganizationIdAndTitleIgnoreCase(organization.getId(), demo.meetingTitle())) {
+            return;
+        }
+
         Meeting meeting = meetingRepository.save(new Meeting(
                 organization,
                 project,
