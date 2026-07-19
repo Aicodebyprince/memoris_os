@@ -44,13 +44,11 @@ All accounts use:
 password123
 ```
 
-| Role | Email |
-| --- | --- |
-| Owner | owner@memoris.dev |
-| Admin | admin@memoris.dev |
-| Manager | manager@memoris.dev |
-| Employee | employee@memoris.dev |
-| Guest | guest@memoris.dev |
+| Organization | Owner | Admin | Manager | Employee | Guest |
+| --- | --- | --- | --- | --- | --- |
+| Memoris Labs | owner@memoris.dev | admin@memoris.dev | manager@memoris.dev | employee@memoris.dev | guest@memoris.dev |
+| Helio Health | owner@heliohealth.dev | admin@heliohealth.dev | manager@heliohealth.dev | employee@heliohealth.dev | guest@heliohealth.dev |
+| FinPilot Capital | owner@finpilot.dev | admin@finpilot.dev | manager@finpilot.dev | employee@finpilot.dev | guest@finpilot.dev |
 
 ## Verification Commands
 

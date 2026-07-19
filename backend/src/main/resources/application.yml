@@ -22,6 +22,8 @@ server:
   port: ${PORT:8080}
 
 app:
+  demo:
+    seed-enabled: ${DEMO_SEED_ENABLED:false}
   ai:
     provider: ${AI_PROVIDER:local}
     max-context-chars: ${AI_MAX_CONTEXT_CHARS:6000}

@@ -21,14 +21,15 @@ import com.memoris.timeline.TimelineEventType;
 import com.memoris.user.AppUser;
 import com.memoris.user.AppUserRepository;
 import java.time.LocalDate;
+import java.util.List;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
-@Profile("local")
+@ConditionalOnProperty(prefix = "app.demo", name = "seed-enabled", havingValue = "true")
 public class DemoDataSeeder {
     @Bean
     CommandLineRunner seedMemorisDemo(
@@ -43,69 +44,201 @@ public class DemoDataSeeder {
             TimelineEventRepository timelineEventRepository,
             PasswordEncoder passwordEncoder
     ) {
-        return args -> {
-            if (userRepository.existsByEmail("owner@memoris.dev")) {
-                return;
+        return args -> demoOrganizations().forEach(demo -> seedOrganization(
+                demo,
+                userRepository,
+                organizationRepository,
+                memberRepository,
+                projectRepository,
+                meetingRepository,
+                decisionRepository,
+                actionItemRepository,
+                documentRepository,
+                timelineEventRepository,
+                passwordEncoder
+        ));
+    }
+
+    private void seedOrganization(
+            DemoOrganization demo,
+            AppUserRepository userRepository,
+            OrganizationRepository organizationRepository,
+            OrganizationMemberRepository memberRepository,
+            ProjectRepository projectRepository,
+            MeetingRepository meetingRepository,
+            DecisionRepository decisionRepository,
+            ActionItemRepository actionItemRepository,
+            KnowledgeDocumentRepository documentRepository,
+            TimelineEventRepository timelineEventRepository,
+            PasswordEncoder passwordEncoder
+    ) {
+        if (organizationRepository.findBySlug(demo.slug()).isPresent()) {
+            return;
+        }
+
+        Organization organization = organizationRepository.save(new Organization(demo.name(), demo.slug()));
+        AppUser owner = null;
+        for (DemoUser demoUser : demo.users()) {
+            AppUser user = userRepository.save(new AppUser(
+                    demoUser.fullName(),
+                    demoUser.email(),
+                    passwordEncoder.encode("password123")
+            ));
+            memberRepository.save(new OrganizationMember(organization, user, demoUser.role(), demoUser.team()));
+            if (demoUser.role() == Role.OWNER) {
+                owner = user;
             }
+        }
 
-            Organization organization = organizationRepository.save(new Organization("Memoris Labs", "memoris-labs"));
-            AppUser owner = userRepository.save(new AppUser("Prince Owner", "owner@memoris.dev", passwordEncoder.encode("password123")));
-            AppUser admin = userRepository.save(new AppUser("Nora Admin", "admin@memoris.dev", passwordEncoder.encode("password123")));
-            AppUser manager = userRepository.save(new AppUser("Asha Manager", "manager@memoris.dev", passwordEncoder.encode("password123")));
-            AppUser employee = userRepository.save(new AppUser("Dev Employee", "employee@memoris.dev", passwordEncoder.encode("password123")));
-            AppUser guest = userRepository.save(new AppUser("Guest Reviewer", "guest@memoris.dev", passwordEncoder.encode("password123")));
+        if (owner == null) {
+            throw new IllegalStateException("Demo organization must include an owner: " + demo.slug());
+        }
 
-            memberRepository.save(new OrganizationMember(organization, owner, Role.OWNER, "Executive"));
-            memberRepository.save(new OrganizationMember(organization, admin, Role.ADMIN, "Operations"));
-            memberRepository.save(new OrganizationMember(organization, manager, Role.MANAGER, "Platform"));
-            memberRepository.save(new OrganizationMember(organization, employee, Role.EMPLOYEE, "Platform"));
-            memberRepository.save(new OrganizationMember(organization, guest, Role.GUEST, "Product"));
+        Project project = projectRepository.save(new Project(organization, demo.projectName(), demo.team()));
+        Meeting meeting = meetingRepository.save(new Meeting(
+                organization,
+                project,
+                owner,
+                demo.meetingTitle(),
+                demo.transcript(),
+                demo.team()
+        ));
+        meeting.enrich(demo.summary(), demo.participants(), demo.topics());
 
-            Project project = projectRepository.save(new Project(organization, "Enterprise Memory MVP", "Platform"));
-            Meeting meeting = meetingRepository.save(new Meeting(
-                    organization,
-                    project,
-                    owner,
-                    "Architecture Review",
-                    "Prince and Asha reviewed PostgreSQL, RBAC, Timeline Intelligence, Enterprise Search, and CockroachDB as a future distributed SQL option.",
-                    "Platform"
-            ));
-            meeting.enrich(
-                    "The team aligned on PostgreSQL first, RBAC before AI retrieval, and CockroachDB as a future distributed SQL path.",
-                    "Prince, Asha",
-                    "PostgreSQL, RBAC, Timeline Intelligence, CockroachDB"
-            );
-            Decision decision = decisionRepository.save(new Decision(
-                    organization,
-                    meeting,
-                    project,
-                    "Start with PostgreSQL and prepare for pgvector",
-                    "PostgreSQL proves strong relational design, enables full-text search, and can evolve into semantic search with pgvector.",
-                    "Platform"
-            ));
-            actionItemRepository.save(new ActionItem(
-                    organization,
-                    meeting,
-                    project,
-                    "Publish ADR-001 for database direction",
-                    "Asha Manager",
-                    LocalDate.now().plusDays(4),
-                    "Platform"
-            ));
-            documentRepository.save(new KnowledgeDocument(
-                    organization,
-                    project,
-                    owner,
-                    "Database Design",
-                    "DOCX",
-                    null,
-                    "Explains PostgreSQL tables, tenant isolation, and the future pgvector extension.",
-                    "Platform"
-            ));
+        Decision decision = decisionRepository.save(new Decision(
+                organization,
+                meeting,
+                project,
+                demo.decisionTitle(),
+                demo.decisionRationale(),
+                demo.team()
+        ));
 
-            timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.MEETING_CREATED, "Meeting created", "Architecture Review", "Meeting", meeting.getId(), "Platform"));
-            timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.AI_SUMMARY_GENERATED, "AI summary generated", meeting.getSummary(), "Meeting", meeting.getId(), "Platform"));
-            timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.DECISION_ADDED, "Decision added", decision.getTitle(), "Decision", decision.getId(), "Platform"));
-        };
+        ActionItem actionItem = actionItemRepository.save(new ActionItem(
+                organization,
+                meeting,
+                project,
+                demo.actionTitle(),
+                demo.actionOwner(),
+                LocalDate.now().plusDays(4),
+                demo.team()
+        ));
+
+        KnowledgeDocument document = documentRepository.save(new KnowledgeDocument(
+                organization,
+                project,
+                owner,
+                demo.documentTitle(),
+                "DOCX",
+                null,
+                demo.documentSummary(),
+                demo.team()
+        ));
+
+        timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.MEETING_CREATED, "Meeting created", meeting.getTitle(), "Meeting", meeting.getId(), demo.team()));
+        timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.AI_SUMMARY_GENERATED, "AI summary generated", meeting.getSummary(), "Meeting", meeting.getId(), demo.team()));
+        timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.DECISION_ADDED, "Decision added", decision.getTitle(), "Decision", decision.getId(), demo.team()));
+        timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.ACTION_ITEM_ASSIGNED, "Action item assigned", actionItem.getTitle() + " -> " + actionItem.getOwnerName(), "ActionItem", actionItem.getId(), demo.team()));
+        timelineEventRepository.save(new TimelineEvent(organization, owner, project, TimelineEventType.DOCUMENT_UPLOADED, "Document uploaded", document.getTitle(), "Document", document.getId(), demo.team()));
+    }
+
+    private List<DemoOrganization> demoOrganizations() {
+        return List.of(
+                new DemoOrganization(
+                        "Memoris Labs",
+                        "memoris-labs",
+                        "Enterprise Memory MVP",
+                        "Platform",
+                        "Architecture Review",
+                        "Prince and Asha reviewed PostgreSQL, RBAC, Timeline Intelligence, Enterprise Search, and CockroachDB as a future distributed SQL option.",
+                        "The team aligned on PostgreSQL first, RBAC before AI retrieval, and CockroachDB as a future distributed SQL path.",
+                        "Prince, Asha",
+                        "PostgreSQL, RBAC, Timeline Intelligence, CockroachDB",
+                        "Start with PostgreSQL and prepare for pgvector",
+                        "PostgreSQL proves strong relational design, enables full-text search, and can evolve into semantic search with pgvector.",
+                        "Database Design",
+                        "Explains PostgreSQL tables, tenant isolation, and the future pgvector extension.",
+                        "Publish ADR-001 for database direction",
+                        "Asha Manager",
+                        List.of(
+                                new DemoUser(Role.OWNER, "Prince Owner", "owner@memoris.dev", "Executive"),
+                                new DemoUser(Role.ADMIN, "Nora Admin", "admin@memoris.dev", "Operations"),
+                                new DemoUser(Role.MANAGER, "Asha Manager", "manager@memoris.dev", "Platform"),
+                                new DemoUser(Role.EMPLOYEE, "Dev Employee", "employee@memoris.dev", "Platform"),
+                                new DemoUser(Role.GUEST, "Guest Reviewer", "guest@memoris.dev", "Product")
+                        )
+                ),
+                new DemoOrganization(
+                        "Helio Health",
+                        "helio-health",
+                        "Patient Ops Memory",
+                        "Care Ops",
+                        "Care Coordination Review",
+                        "Maya and Arjun reviewed patient handoff quality, audit trails, RBAC restrictions, and a policy that protected health data must be filtered before AI context is assembled.",
+                        "The care operations team aligned on strict permission filtering before AI retrieval and a timeline-first audit trail for patient handoffs.",
+                        "Maya, Arjun",
+                        "RBAC, Patient Handoffs, Audit Trail, AI Safety",
+                        "Filter protected care data before AI retrieval",
+                        "Care data should only enter AI prompts after tenant, role, and team authorization checks pass.",
+                        "Care Handoff Protocol",
+                        "Documents handoff review steps, evidence trails, and access boundaries for care operations.",
+                        "Record RBAC demo for care team access",
+                        "Maya Manager",
+                        List.of(
+                                new DemoUser(Role.OWNER, "Maya Owner", "owner@heliohealth.dev", "Executive"),
+                                new DemoUser(Role.ADMIN, "Ira Admin", "admin@heliohealth.dev", "Operations"),
+                                new DemoUser(Role.MANAGER, "Maya Manager", "manager@heliohealth.dev", "Care Ops"),
+                                new DemoUser(Role.EMPLOYEE, "Arjun Employee", "employee@heliohealth.dev", "Care Ops"),
+                                new DemoUser(Role.GUEST, "Care Guest", "guest@heliohealth.dev", "Quality")
+                        )
+                ),
+                new DemoOrganization(
+                        "FinPilot Capital",
+                        "finpilot-capital",
+                        "Risk Intelligence Hub",
+                        "Risk",
+                        "Risk Controls Review",
+                        "Nikhil and Sara reviewed quarterly risk controls, approval evidence, financial document access, and a decision to keep executive compensation discussions restricted to owner and admin roles.",
+                        "The risk team aligned on evidence-backed decisions, finance document access controls, and restricted handling for sensitive executive compensation records.",
+                        "Nikhil, Sara",
+                        "Risk Controls, Evidence, Finance RBAC, Executive Compensation",
+                        "Require evidence cards for risk decisions",
+                        "Risk decisions need traceable meeting, document, and timeline evidence before leadership review.",
+                        "Quarterly Risk Controls",
+                        "Summarizes control evidence, ownership, and permission boundaries for finance data.",
+                        "Prepare risk evidence viewer walkthrough",
+                        "Sara Manager",
+                        List.of(
+                                new DemoUser(Role.OWNER, "Nikhil Owner", "owner@finpilot.dev", "Executive"),
+                                new DemoUser(Role.ADMIN, "Rhea Admin", "admin@finpilot.dev", "Operations"),
+                                new DemoUser(Role.MANAGER, "Sara Manager", "manager@finpilot.dev", "Risk"),
+                                new DemoUser(Role.EMPLOYEE, "Analyst Employee", "employee@finpilot.dev", "Risk"),
+                                new DemoUser(Role.GUEST, "Audit Guest", "guest@finpilot.dev", "Audit")
+                        )
+                )
+        );
+    }
+
+    private record DemoOrganization(
+            String name,
+            String slug,
+            String projectName,
+            String team,
+            String meetingTitle,
+            String transcript,
+            String summary,
+            String participants,
+            String topics,
+            String decisionTitle,
+            String decisionRationale,
+            String documentTitle,
+            String documentSummary,
+            String actionTitle,
+            String actionOwner,
+            List<DemoUser> users
+    ) {
+    }
+
+    private record DemoUser(Role role, String fullName, String email, String team) {
     }
 }

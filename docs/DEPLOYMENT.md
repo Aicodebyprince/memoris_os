@@ -41,13 +41,14 @@ JWT_SECRET=YOUR_LONG_RANDOM_SECRET_64_PLUS_CHARS
 JWT_EXPIRES_MINUTES=720
 
 CORS_ALLOWED_ORIGINS=https://YOUR_VERCEL_APP.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+DEMO_SEED_ENABLED=true
 
 AI_PROVIDER=gemini
 GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 GEMINI_MODEL=gemini-3.5-flash
 ```
 
-Use `AI_PROVIDER=local` until you have the Gemini key.
+Use `AI_PROVIDER=local` until you have the Gemini key. Use `DEMO_SEED_ENABLED=true` for the public demo app so the three demo organizations are created in Neon.
 
 ## 3. Backend Build Settings
 

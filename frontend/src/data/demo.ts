@@ -1,6 +1,45 @@
-import type { Evidence, Role, SearchResult, TimelineEvent } from "../types/memoris";
+import type { DemoOrganization, Evidence, Role, SearchResult, TimelineEvent } from "../types/memoris";
 
 export const roles: Role[] = ["Owner", "Admin", "Manager", "Employee", "Guest"];
+
+export const demoOrganizations: DemoOrganization[] = [
+  {
+    key: "memoris-labs",
+    name: "Memoris Labs",
+    slug: "memoris-labs",
+    industry: "SDE platform",
+    projectName: "Enterprise Memory MVP",
+    team: "Platform",
+    defaultQuery: "CockroachDB",
+    defaultQuestion: "Why did we choose PostgreSQL first?",
+    defaultTranscript:
+      "Prince and Asha reviewed the Memoris OS architecture. The team agreed to start with PostgreSQL for relational modeling, JWT and RBAC for secure tenant access, Timeline Intelligence for every meaningful event, and pgvector for semantic search. CockroachDB remains a future option if distributed SQL becomes necessary for enterprise scale. Action: publish ADR-001 and prepare the demo workflow."
+  },
+  {
+    key: "helio-health",
+    name: "Helio Health",
+    slug: "helio-health",
+    industry: "Healthcare ops",
+    projectName: "Patient Ops Memory",
+    team: "Care Ops",
+    defaultQuery: "handoff",
+    defaultQuestion: "Why do we filter care data before AI retrieval?",
+    defaultTranscript:
+      "Maya and Arjun reviewed patient handoff quality, audit trails, RBAC restrictions, and a policy that protected health data must be filtered before AI context is assembled. The team agreed to make Timeline Intelligence the audit trail for every important care handoff. Action: record the RBAC demo for care team access."
+  },
+  {
+    key: "finpilot-capital",
+    name: "FinPilot Capital",
+    slug: "finpilot-capital",
+    industry: "Finance risk",
+    projectName: "Risk Intelligence Hub",
+    team: "Risk",
+    defaultQuery: "risk controls",
+    defaultQuestion: "Why do risk decisions need evidence cards?",
+    defaultTranscript:
+      "Nikhil and Sara reviewed quarterly risk controls, approval evidence, financial document access, and a decision to keep executive compensation discussions restricted to owner and admin roles. The team agreed every risk decision must show meeting, document, and timeline evidence. Action: prepare the risk evidence viewer walkthrough."
+  }
+];
 
 export const metrics = [
   { label: "Meetings", value: "42", delta: "+8 this week", tone: "moss" },
@@ -164,4 +203,4 @@ export const buildPhases = [
 ];
 
 export const defaultTranscript =
-  "Prince and Asha reviewed the Memoris OS architecture. The team agreed to start with PostgreSQL for relational modeling, JWT and RBAC for secure tenant access, Timeline Intelligence for every meaningful event, and pgvector for semantic search. CockroachDB remains a future option if distributed SQL becomes necessary for enterprise scale. Action: publish ADR-001 and prepare the demo workflow.";
+  demoOrganizations[0].defaultTranscript;

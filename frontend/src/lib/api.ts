@@ -1,4 +1,4 @@
-import type { Role } from "../types/memoris";
+import type { DemoOrganizationKey, Role } from "../types/memoris";
 
 const TOKEN_KEY = "memoris.token";
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
@@ -93,12 +93,28 @@ export interface HealthResponse {
   timestamp: string;
 }
 
-export const demoCredentials: Record<Role, { email: string; password: string }> = {
-  Owner: { email: "owner@memoris.dev", password: "password123" },
-  Admin: { email: "admin@memoris.dev", password: "password123" },
-  Manager: { email: "manager@memoris.dev", password: "password123" },
-  Employee: { email: "employee@memoris.dev", password: "password123" },
-  Guest: { email: "guest@memoris.dev", password: "password123" }
+export const demoCredentials: Record<DemoOrganizationKey, Record<Role, { email: string; password: string }>> = {
+  "memoris-labs": {
+    Owner: { email: "owner@memoris.dev", password: "password123" },
+    Admin: { email: "admin@memoris.dev", password: "password123" },
+    Manager: { email: "manager@memoris.dev", password: "password123" },
+    Employee: { email: "employee@memoris.dev", password: "password123" },
+    Guest: { email: "guest@memoris.dev", password: "password123" }
+  },
+  "helio-health": {
+    Owner: { email: "owner@heliohealth.dev", password: "password123" },
+    Admin: { email: "admin@heliohealth.dev", password: "password123" },
+    Manager: { email: "manager@heliohealth.dev", password: "password123" },
+    Employee: { email: "employee@heliohealth.dev", password: "password123" },
+    Guest: { email: "guest@heliohealth.dev", password: "password123" }
+  },
+  "finpilot-capital": {
+    Owner: { email: "owner@finpilot.dev", password: "password123" },
+    Admin: { email: "admin@finpilot.dev", password: "password123" },
+    Manager: { email: "manager@finpilot.dev", password: "password123" },
+    Employee: { email: "employee@finpilot.dev", password: "password123" },
+    Guest: { email: "guest@finpilot.dev", password: "password123" }
+  }
 };
 
 export function toRole(role: BackendRole): Role {
@@ -118,8 +134,8 @@ export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
-export async function login(role: Role) {
-  const credentials = demoCredentials[role];
+export async function login(role: Role, organizationKey: DemoOrganizationKey) {
+  const credentials = demoCredentials[organizationKey][role];
   const response = await fetch(apiUrl("/api/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -147,7 +163,7 @@ export async function searchKnowledge(token: string, query: string) {
   return apiGet<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`, token);
 }
 
-export async function processMeeting(token: string, transcript: string) {
+export async function processMeeting(token: string, transcript: string, projectName: string, team: string) {
   const response = await fetch(apiUrl("/api/knowledge/meetings/process"), {
     method: "POST",
     headers: {
@@ -156,8 +172,8 @@ export async function processMeeting(token: string, transcript: string) {
     },
     body: JSON.stringify({
       title: "Sprint Planning Meeting",
-      projectName: "Enterprise Memory MVP",
-      team: "Platform",
+      projectName,
+      team,
       transcript
     })
   });

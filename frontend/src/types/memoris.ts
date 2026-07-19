@@ -1,5 +1,19 @@
 export type Role = "Owner" | "Admin" | "Manager" | "Employee" | "Guest";
 
+export type DemoOrganizationKey = "memoris-labs" | "helio-health" | "finpilot-capital";
+
+export interface DemoOrganization {
+  key: DemoOrganizationKey;
+  name: string;
+  slug: string;
+  industry: string;
+  projectName: string;
+  team: string;
+  defaultQuery: string;
+  defaultQuestion: string;
+  defaultTranscript: string;
+}
+
 export type TimelineEventType =
   | "Meeting Created"
   | "AI Summary Generated"

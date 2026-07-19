@@ -50,6 +50,7 @@ import {
   actionItems,
   buildPhases,
   defaultTranscript,
+  demoOrganizations,
   documents,
   evidence,
   initialTimeline,
@@ -60,7 +61,7 @@ import {
   searchResults
 } from "./data/demo";
 import { cn } from "./lib/utils";
-import type { Evidence, Role, SearchResult, TimelineEvent } from "./types/memoris";
+import type { DemoOrganizationKey, Evidence, Role, SearchResult, TimelineEvent } from "./types/memoris";
 
 type Tone = "moss" | "coral" | "saffron" | "iris" | "graphite";
 type ConnectionState = "connecting" | "connected" | "offline";
@@ -74,6 +75,7 @@ const toneByType: Record<TimelineEvent["type"], Tone> = {
 };
 
 function App() {
+  const [organizationKey, setOrganizationKey] = useState<DemoOrganizationKey>("memoris-labs");
   const [role, setRole] = useState<Role>("Owner");
   const [auth, setAuth] = useState<AuthProfile | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -88,12 +90,17 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processed, setProcessed] = useState(true);
   const [processOutput, setProcessOutput] = useState<ProcessMeetingResponse | null>(null);
-  const [query, setQuery] = useState("CockroachDB");
+  const [query, setQuery] = useState(demoOrganizations[0].defaultQuery);
   const [apiSearch, setApiSearch] = useState<SearchResult[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
-  const [question, setQuestion] = useState("Why did we choose CockroachDB?");
+  const [question, setQuestion] = useState(demoOrganizations[0].defaultQuestion);
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
   const [isAsking, setIsAsking] = useState(false);
+
+  const currentOrganization = useMemo(
+    () => demoOrganizations.find((item) => item.key === organizationKey) ?? demoOrganizations[0],
+    [organizationKey]
+  );
 
   const refreshWorkspace = useCallback(async (activeToken: string) => {
     const [dashboardResult, timelineResult] = await Promise.all([
@@ -106,17 +113,21 @@ function App() {
   }, []);
 
   const loginAs = useCallback(
-    async (nextRole: Role, silent = false) => {
+    async (nextRole: Role, nextOrganizationKey: DemoOrganizationKey, silent = false) => {
       setRole(nextRole);
       setConnection("connecting");
       setLoadingRole(nextRole);
-      setConnectionMessage(`${silent ? "Checking" : "Clicked"} ${nextRole}. Testing backend health...`);
+      const selectedOrganization =
+        demoOrganizations.find((item) => item.key === nextOrganizationKey) ?? demoOrganizations[0];
+      setConnectionMessage(
+        `${silent ? "Checking" : "Clicked"} ${selectedOrganization.name} / ${nextRole}. Testing backend health...`
+      );
 
       try {
         const health = await healthCheck();
         setAiProvider(health.aiProvider ?? "local");
-        setConnectionMessage(`Backend OK. Logging in as ${nextRole}...`);
-        const profile = await login(nextRole);
+        setConnectionMessage(`Backend OK. Logging in as ${nextRole} at ${selectedOrganization.name}...`);
+        const profile = await login(nextRole, nextOrganizationKey);
         storeToken(profile.token);
         setToken(profile.token);
         setAuth(profile);
@@ -145,7 +156,7 @@ function App() {
   );
 
   useEffect(() => {
-    void loginAs("Owner", true);
+    void loginAs("Owner", "memoris-labs", true);
   }, [loginAs]);
 
   useEffect(() => {
@@ -156,14 +167,14 @@ function App() {
     let attempts = 0;
     const retry = window.setInterval(() => {
       attempts += 1;
-      void loginAs(role, true);
+      void loginAs(role, organizationKey, true);
       if (attempts >= 20) {
         window.clearInterval(retry);
       }
     }, 2000);
 
     return () => window.clearInterval(retry);
-  }, [connection, loginAs, role, token]);
+  }, [connection, loginAs, organizationKey, role, token]);
 
   useEffect(() => {
     if (!token || !query.trim()) {
@@ -219,8 +230,8 @@ function App() {
     if (apiTimeline) return apiTimeline;
     if (role === "Owner" || role === "Admin") return timeline;
     if (role === "Guest") return timeline.slice(0, 3);
-    return timeline.filter((event) => event.team === "Platform");
-  }, [apiTimeline, role, timeline]);
+    return timeline.filter((event) => event.team === currentOrganization.team);
+  }, [apiTimeline, currentOrganization.team, role, timeline]);
 
   const localAskBlocked = question.toLowerCase().includes("salary") && role !== "Owner" && role !== "Admin";
   const answer = askResult
@@ -248,7 +259,12 @@ function App() {
     setIsProcessing(true);
     try {
       if (token) {
-        const result = await processMeeting(token, transcript);
+        const result = await processMeeting(
+          token,
+          transcript,
+          currentOrganization.projectName,
+          currentOrganization.team
+        );
         setProcessOutput(result);
         setProcessed(true);
         await refreshWorkspace(token);
@@ -311,10 +327,23 @@ function App() {
     try {
       setConnection("connecting");
       setConnectionMessage("Checking backend health and logging in again...");
-      await loginAs(role);
+      await loginAs(role, organizationKey);
     } catch {
       setConnection("offline");
     }
+  }
+
+  function switchOrganization(nextOrganizationKey: DemoOrganizationKey) {
+    const nextOrganization =
+      demoOrganizations.find((item) => item.key === nextOrganizationKey) ?? demoOrganizations[0];
+    setOrganizationKey(nextOrganizationKey);
+    setTranscript(nextOrganization.defaultTranscript);
+    setQuery(nextOrganization.defaultQuery);
+    setQuestion(nextOrganization.defaultQuestion);
+    setProcessOutput(null);
+    setAskResult(null);
+    setApiSearch(null);
+    void loginAs(role, nextOrganizationKey);
   }
 
   return (
@@ -354,11 +383,13 @@ function App() {
             <div className="mt-auto rounded-lg border border-white/10 bg-white/6 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-white">
                 <Building2 className="h-4 w-4 text-saffron" />
-                {auth?.organization.name ?? "Memoris Labs"}
+                {auth?.organization.name ?? currentOrganization.name}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/65">
                 <span>Tenant</span>
-                <span className="text-right text-white">{auth?.organization.slug ?? "memoris-labs"}</span>
+                <span className="text-right text-white">{auth?.organization.slug ?? currentOrganization.slug}</span>
+                <span>Project</span>
+                <span className="truncate text-right text-white">{currentOrganization.projectName}</span>
                 <span>Backend</span>
                 <span className="text-right text-white">{connection === "connected" ? "Live" : "Demo"}</span>
                 <span>User</span>
@@ -392,10 +423,22 @@ function App() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={organizationKey}
+                onChange={(event) => switchOrganization(event.target.value as DemoOrganizationKey)}
+                className="h-8 rounded-full border border-graphite/10 bg-white px-3 text-xs font-bold text-ink outline-none transition hover:border-moss/35 focus:border-moss"
+                aria-label="Demo organization"
+              >
+                {demoOrganizations.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
               {roles.map((item) => (
                 <button
                   key={item}
-                  onClick={() => void loginAs(item)}
+                  onClick={() => void loginAs(item, organizationKey)}
                   disabled={loadingRole === item}
                   className={cn(
                     "h-8 rounded-full px-3 text-xs font-bold ring-1 transition disabled:cursor-wait disabled:opacity-70",
@@ -430,7 +473,11 @@ function App() {
               <StatusTile
                 label="Signed In"
                 value={auth ? auth.user.fullName : "No API user"}
-                detail={auth ? `${auth.user.role} - ${auth.user.team} - ${auth.user.email}` : "Using local demo cards"}
+                detail={
+                  auth
+                    ? `${auth.organization.name} - ${auth.user.role} - ${auth.user.team}`
+                    : `${currentOrganization.industry} demo`
+                }
                 tone={auth ? "iris" : "graphite"}
               />
               <StatusTile
