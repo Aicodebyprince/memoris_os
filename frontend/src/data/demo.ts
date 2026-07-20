@@ -10,10 +10,10 @@ export const demoOrganizations: DemoOrganization[] = [
     industry: "SDE platform",
     projectName: "Enterprise Memory MVP",
     team: "Platform",
-    defaultQuery: "CockroachDB",
-    defaultQuestion: "Why did we choose PostgreSQL first?",
+    defaultQuery: "evidence",
+    defaultQuestion: "Why do answers need evidence cards?",
     defaultTranscript:
-      "Prince and Asha reviewed the Memoris OS architecture. The team agreed to start with PostgreSQL for relational modeling, JWT and RBAC for secure tenant access, Timeline Intelligence for every meaningful event, and pgvector for semantic search. CockroachDB remains a future option if distributed SQL becomes necessary for enterprise scale. Action: publish ADR-001 and prepare the demo workflow."
+      "Prince and Asha reviewed the Memoris OS workspace experience. The team agreed that every important answer should include evidence cards, every meaningful action should appear on the timeline, and every search result should respect organization and role permissions. Action: publish the evidence viewer walkthrough and prepare the demo workflow."
   },
   {
     key: "helio-health",
@@ -53,7 +53,7 @@ export const recentMeetings = [
   {
     title: "Architecture Review",
     meta: "Platform - 38 min",
-    summary: "PostgreSQL first, RBAC before retrieval, pgvector next."
+    summary: "Evidence cards, timeline history, and role-filtered answers moved into the demo."
   },
   {
     title: "Sprint Planning",
@@ -63,19 +63,19 @@ export const recentMeetings = [
   {
     title: "Security Review",
     meta: "Platform - 31 min",
-    summary: "JWT rotation and organization-scoped access checks prioritized."
+    summary: "Organization-scoped access checks prioritized."
   }
 ];
 
 export const recentDecisions = [
   {
-    title: "Start with PostgreSQL",
-    rationale: "Best path for relational modeling, full-text search, and pgvector.",
+    title: "Require evidence cards",
+    rationale: "Every AI answer should include source records users can verify.",
     status: "Accepted"
   },
   {
-    title: "RBAC before AI context",
-    rationale: "Unauthorized knowledge must never enter model prompts.",
+    title: "Permission checks before answers",
+    rationale: "Unauthorized knowledge must never appear in results.",
     status: "Accepted"
   },
   {
@@ -86,14 +86,14 @@ export const recentDecisions = [
 ];
 
 export const documents = [
-  { title: "Database Design", kind: "DOCX", team: "Platform" },
-  { title: "ADR-001 Storage Direction", kind: "PDF", team: "Platform" },
+  { title: "Evidence Viewer Design", kind: "DOCX", team: "Platform" },
+  { title: "Workspace Access Policy", kind: "PDF", team: "Platform" },
   { title: "Launch Readiness", kind: "DOCX", team: "Product" }
 ];
 
 export const actionItems = [
-  { title: "Publish ADR-001", owner: "Asha", due: "Jul 22", status: "Open" },
-  { title: "Add pgvector migration draft", owner: "Prince", due: "Jul 24", status: "Open" },
+  { title: "Publish evidence viewer walkthrough", owner: "Asha", due: "Jul 22", status: "Open" },
+  { title: "Review workspace access policy", owner: "Prince", due: "Jul 24", status: "Open" },
   { title: "Record RBAC demo", owner: "Dev", due: "Jul 26", status: "Review" }
 ];
 
@@ -102,7 +102,7 @@ export const initialTimeline: TimelineEvent[] = [
     id: "t1",
     time: "10:10 AM",
     type: "Document Uploaded",
-    title: "Database Design uploaded",
+    title: "Evidence Viewer Design uploaded",
     detail: "DOCX linked to Enterprise Memory MVP.",
     project: "Enterprise Memory MVP",
     team: "Platform"
@@ -120,8 +120,8 @@ export const initialTimeline: TimelineEvent[] = [
     id: "t3",
     time: "10:07 AM",
     type: "Decision Added",
-    title: "Start with PostgreSQL",
-    detail: "Decision linked to Architecture Review and ADR-001.",
+    title: "Require evidence cards",
+    detail: "Decision linked to Architecture Review and evidence viewer design.",
     project: "Enterprise Memory MVP",
     team: "Platform"
   },
@@ -130,7 +130,7 @@ export const initialTimeline: TimelineEvent[] = [
     time: "10:05 AM",
     type: "AI Summary Generated",
     title: "Architecture Review summarized",
-    detail: "Topics: PostgreSQL, RBAC, Timeline Intelligence, pgvector.",
+    detail: "Topics: Evidence, access control, Timeline Intelligence, workspace memory.",
     project: "Enterprise Memory MVP",
     team: "Platform"
   },
@@ -149,22 +149,22 @@ export const evidence: Evidence[] = [
   {
     type: "Meeting",
     title: "Architecture Review",
-    excerpt: "The team chose PostgreSQL first and kept CockroachDB as the future distributed SQL path."
+    excerpt: "The team agreed every important answer should include source evidence."
   },
   {
     type: "Decision",
-    title: "ADR-001 Storage Direction",
-    excerpt: "PostgreSQL gives strong relational modeling and a smooth pgvector upgrade path."
+    title: "Evidence Viewer Direction",
+    excerpt: "Answers must cite the meeting, decision, document, or timeline event used."
   },
   {
     type: "Document",
-    title: "Database Design",
-    excerpt: "Tenant isolation, full-text search, and semantic retrieval are documented as storage goals."
+    title: "Workspace Access Policy",
+    excerpt: "Organization and role permissions are documented as the first filter."
   },
   {
     type: "Timeline Event",
     title: "Decision Added",
-    excerpt: "The database direction was recorded after the Architecture Review summary."
+    excerpt: "The evidence requirement was recorded after the Architecture Review summary."
   }
 ];
 
@@ -172,25 +172,25 @@ export const searchResults: SearchResult[] = [
   {
     type: "Meeting",
     title: "Architecture Review",
-    snippet: "CockroachDB was discussed as the future distributed SQL option after PostgreSQL foundations.",
+    snippet: "Evidence cards were selected so teams can verify every answer.",
     score: 0.94
   },
   {
     type: "Decision",
-    title: "ADR-001 Storage Direction",
-    snippet: "PostgreSQL now, pgvector next, CockroachDB later if global scale requires it.",
+    title: "Evidence Viewer Direction",
+    snippet: "Every answer must cite authorized source records.",
     score: 0.89
   },
   {
     type: "Document",
-    title: "Database Design",
-    snippet: "Explains tenant tables, search indexes, and the distributed SQL migration path.",
+    title: "Workspace Access Policy",
+    snippet: "Explains organization isolation, role checks, and evidence visibility.",
     score: 0.82
   },
   {
     type: "Timeline Event",
     title: "Decision Added",
-    snippet: "Database decision attached to meeting, document, and action item evidence.",
+    snippet: "Evidence requirement attached to meeting, document, and action item records.",
     score: 0.78
   }
 ];

@@ -52,6 +52,13 @@ export interface ProcessMeetingResponse {
   timeline: string[];
 }
 
+export interface DocumentUploadResponse {
+  id: string;
+  title: string;
+  sourceType: string;
+  summary: string;
+}
+
 export interface TimelineResponse {
   id: string;
   eventType: string;
@@ -91,6 +98,16 @@ export interface HealthResponse {
   status: string;
   aiProvider?: string;
   timestamp: string;
+}
+
+export interface RegisterRequest {
+  fullName: string;
+  email: string;
+  password: string;
+  organizationName: string;
+  organizationSlug?: string;
+  requestedRole?: BackendRole;
+  team?: string;
 }
 
 export const demoCredentials: Record<DemoOrganizationKey, Record<Role, { email: string; password: string }>> = {
@@ -144,6 +161,15 @@ export async function login(role: Role, organizationKey: DemoOrganizationKey) {
   return requestJson<AuthProfile>(response);
 }
 
+export async function registerAccount(request: RegisterRequest) {
+  const response = await fetch(apiUrl("/api/auth/register"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request)
+  });
+  return requestJson<AuthProfile>(response);
+}
+
 export async function healthCheck() {
   const response = await fetch(apiUrl("/api/health"), {
     cache: "no-store"
@@ -180,6 +206,27 @@ export async function processMeeting(token: string, transcript: string, projectN
   return requestJson<ProcessMeetingResponse>(response);
 }
 
+export async function uploadDocument(token: string, file: File, projectName: string, team: string) {
+  const contentBase64 = arrayBufferToBase64(await file.arrayBuffer());
+
+  const response = await fetch(apiUrl("/api/knowledge/documents/file"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      filename: file.name,
+      contentBase64,
+      contentType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+      projectName,
+      team
+    })
+  });
+  return requestJson<DocumentUploadResponse>(response);
+}
+
 export async function askMemoris(token: string, question: string) {
   const response = await fetch(apiUrl("/api/ask"), {
     method: "POST",
@@ -208,6 +255,17 @@ function normalizeApiBaseUrl(value: string | undefined) {
     return "";
   }
   return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return window.btoa(binary);
 }
 
 async function requestJson<T>(response: Response) {

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,17 +23,25 @@ public class MemorisAiService {
     private static final Logger log = LoggerFactory.getLogger(MemorisAiService.class);
 
     private final AiProperties properties;
-    private final RestClient restClient;
+    private final RestClient geminiClient;
+    private final RestClient openAiClient;
     private final ObjectMapper objectMapper;
 
     public MemorisAiService(AiProperties properties, RestClient.Builder restClientBuilder, ObjectMapper objectMapper) {
         this.properties = properties;
-        this.restClient = restClientBuilder.baseUrl(properties.getGemini().getBaseUrl()).build();
+        this.geminiClient = restClientBuilder.clone().baseUrl(properties.getGemini().getBaseUrl()).build();
+        this.openAiClient = restClientBuilder.clone().baseUrl(properties.getOpenai().getBaseUrl()).build();
         this.objectMapper = objectMapper;
     }
 
     public String activeProvider() {
-        return geminiEnabled() ? "gemini" : "local";
+        if (geminiEnabled()) {
+            return "gemini";
+        }
+        if (openAiEnabled()) {
+            return "openai";
+        }
+        return "local";
     }
 
     public AiMeetingAnalysis analyzeMeeting(String transcript) {
@@ -41,6 +50,13 @@ public class MemorisAiService {
                 return analyzeWithGemini(transcript);
             } catch (RuntimeException exception) {
                 log.warn("Gemini meeting analysis failed. Falling back to local analysis.", exception);
+            }
+        }
+        if (openAiEnabled()) {
+            try {
+                return analyzeWithOpenAi(transcript);
+            } catch (RuntimeException exception) {
+                log.warn("OpenAI meeting analysis failed. Falling back to local analysis.", exception);
             }
         }
         return analyzeLocally(transcript);
@@ -72,8 +88,47 @@ public class MemorisAiService {
                 log.warn("Gemini answer generation failed. Falling back to local answer.", exception);
             }
         }
+        if (openAiEnabled()) {
+            try {
+                String prompt = """
+                        You are Memoris OS, an enterprise memory assistant.
+                        Answer the user's question using only the authorized evidence below.
+                        Keep the answer concise, specific, and evidence-backed.
+
+                        Question:
+                        %s
+
+                        Authorized evidence:
+                        %s
+                        """.formatted(question, formatEvidence(evidence));
+                String answer = generateOpenAi(prompt, false);
+                if (StringUtils.hasText(answer)) {
+                    return answer.trim();
+                }
+            } catch (RuntimeException exception) {
+                log.warn("OpenAI answer generation failed. Falling back to local answer.", exception);
+            }
+        }
 
         return synthesizeLocally(question.toLowerCase(), evidence);
+    }
+
+    public List<Double> embed(String text) {
+        if (geminiEnabled()) {
+            try {
+                return embeddingWithGemini(text);
+            } catch (RuntimeException exception) {
+                log.warn("Gemini embedding failed. Falling back to local embedding.", exception);
+            }
+        }
+        if (openAiEnabled()) {
+            try {
+                return embeddingWithOpenAi(text);
+            } catch (RuntimeException exception) {
+                log.warn("OpenAI embedding failed. Falling back to local embedding.", exception);
+            }
+        }
+        return localEmbedding(text);
     }
 
     private AiMeetingAnalysis analyzeWithGemini(String transcript) {
@@ -109,6 +164,39 @@ public class MemorisAiService {
         }
     }
 
+    private AiMeetingAnalysis analyzeWithOpenAi(String transcript) {
+        String prompt = """
+                You are the AI processing layer for Memoris OS.
+                Extract structured enterprise memory from the meeting transcript.
+                Return only valid JSON with this shape:
+                {
+                  "summary": "short summary",
+                  "participants": ["name"],
+                  "topics": ["topic"],
+                  "decisions": [{"title": "decision title", "rationale": "why"}],
+                  "actionItems": [{"title": "task", "ownerName": "person or team", "dueDate": "YYYY-MM-DD or null"}]
+                }
+
+                Meeting transcript:
+                %s
+                """.formatted(limit(transcript, properties.getMaxContextChars()));
+
+        String text = generateOpenAi(prompt, true);
+        try {
+            JsonNode root = objectMapper.readTree(extractJson(text));
+            AiMeetingAnalysis fallback = analyzeLocally(transcript);
+            return new AiMeetingAnalysis(
+                    textOr(root.path("summary"), fallback.summary()),
+                    stringList(root.path("participants"), fallback.participants()),
+                    stringList(root.path("topics"), fallback.topics()),
+                    decisionList(root.path("decisions"), fallback.decisions()),
+                    actionList(root.path("actionItems"), fallback.actionItems())
+            );
+        } catch (Exception exception) {
+            throw new IllegalStateException("Could not parse OpenAI structured meeting response", exception);
+        }
+    }
+
     private String generateGemini(String prompt, boolean json) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("contents", List.of(Map.of(
@@ -124,7 +212,7 @@ public class MemorisAiService {
         payload.put("generationConfig", generationConfig);
 
         try {
-            JsonNode response = restClient.post()
+            JsonNode response = geminiClient.post()
                     .uri("/models/{model}:generateContent", properties.getGemini().getModel())
                     .header("x-goog-api-key", properties.getGemini().getApiKey())
                     .body(payload)
@@ -137,6 +225,155 @@ public class MemorisAiService {
         } catch (RestClientException exception) {
             throw new IllegalStateException("Gemini API request failed", exception);
         }
+    }
+
+    private String generateOpenAi(String prompt, boolean json) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", properties.getOpenai().getModel());
+        payload.put("messages", List.of(
+                Map.of(
+                        "role", "system",
+                        "content", "You are Memoris OS. Use only authorized evidence and return compact enterprise-ready output."
+                ),
+                Map.of("role", "user", "content", prompt)
+        ));
+        payload.put("max_tokens", properties.getOpenai().getMaxOutputTokens());
+        if (json) {
+            payload.put("response_format", Map.of("type", "json_object"));
+        }
+
+        try {
+            JsonNode response = openAiClient.post()
+                    .uri("/chat/completions")
+                    .header("Authorization", "Bearer " + properties.getOpenai().getApiKey())
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+            if (response == null) {
+                return "";
+            }
+            return response.path("choices").path(0).path("message").path("content").asText("");
+        } catch (RestClientException exception) {
+            throw new IllegalStateException("OpenAI API request failed", exception);
+        }
+    }
+
+    private List<Double> embeddingWithGemini(String text) {
+        RuntimeException lastException = null;
+        for (String model : geminiEmbeddingModels()) {
+            try {
+                List<Double> embedding = requestGeminiEmbedding(model, text);
+                if (!embedding.isEmpty()) {
+                    return embedding;
+                }
+            } catch (RuntimeException exception) {
+                lastException = exception;
+            }
+        }
+        throw new IllegalStateException("Gemini embedding request failed", lastException);
+    }
+
+    private List<String> geminiEmbeddingModels() {
+        Set<String> models = new LinkedHashSet<>();
+        if (StringUtils.hasText(properties.getGemini().getEmbeddingModel())) {
+            models.add(stripModelPrefix(properties.getGemini().getEmbeddingModel()));
+        }
+        models.add("gemini-embedding-001");
+        models.add("embedding-001");
+        return List.copyOf(models);
+    }
+
+    private String stripModelPrefix(String model) {
+        return model.startsWith("models/") ? model.substring("models/".length()) : model;
+    }
+
+    private List<Double> requestGeminiEmbedding(String model, String text) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", "models/" + model);
+        payload.put("content", Map.of("parts", List.of(Map.of("text", limit(text, properties.getMaxContextChars())))));
+
+        try {
+            JsonNode response = geminiClient.post()
+                    .uri("/models/{model}:embedContent", model)
+                    .header("x-goog-api-key", properties.getGemini().getApiKey())
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+            if (response == null) {
+                return localEmbedding(text);
+            }
+            return numberList(response.path("embedding").path("values"));
+        } catch (RestClientException exception) {
+            throw new IllegalStateException("Gemini embedding model failed: " + model, exception);
+        }
+    }
+
+    private List<Double> embeddingWithOpenAi(String text) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", properties.getOpenai().getEmbeddingModel());
+        payload.put("input", limit(text, properties.getMaxContextChars()));
+        payload.put("dimensions", properties.getEmbeddingDimensions());
+
+        try {
+            JsonNode response = openAiClient.post()
+                    .uri("/embeddings")
+                    .header("Authorization", "Bearer " + properties.getOpenai().getApiKey())
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+            if (response == null) {
+                return localEmbedding(text);
+            }
+            return numberList(response.path("data").path(0).path("embedding"));
+        } catch (RestClientException exception) {
+            throw new IllegalStateException("OpenAI embedding request failed", exception);
+        }
+    }
+
+    private List<Double> numberList(JsonNode node) {
+        if (!node.isArray()) {
+            return localEmbedding("");
+        }
+        List<Double> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            values.add(item.asDouble());
+        }
+        if (values.size() == properties.getEmbeddingDimensions()) {
+            return values;
+        }
+
+        double[] resized = new double[properties.getEmbeddingDimensions()];
+        for (int index = 0; index < Math.min(values.size(), resized.length); index += 1) {
+            resized[index] = values.get(index);
+        }
+        return Arrays.stream(resized).boxed().toList();
+    }
+
+    private List<Double> localEmbedding(String text) {
+        int dimensions = properties.getEmbeddingDimensions();
+        double[] vector = new double[dimensions];
+        String clean = text == null ? "" : text.toLowerCase().replaceAll("[^a-z0-9\\s]", " ");
+        for (String token : clean.split("\\s+")) {
+            if (token.length() < 2) {
+                continue;
+            }
+            int index = Math.floorMod(token.hashCode(), dimensions);
+            vector[index] += 1.0;
+        }
+
+        double norm = 0.0;
+        for (double value : vector) {
+            norm += value * value;
+        }
+        norm = Math.sqrt(norm);
+        if (norm == 0.0) {
+            vector[0] = 1.0;
+        } else {
+            for (int index = 0; index < vector.length; index += 1) {
+                vector[index] = vector[index] / norm;
+            }
+        }
+        return Arrays.stream(vector).boxed().toList();
     }
 
     private AiMeetingAnalysis analyzeLocally(String transcript) {
@@ -333,5 +570,10 @@ public class MemorisAiService {
     private boolean geminiEnabled() {
         return "gemini".equalsIgnoreCase(properties.getProvider())
                 && StringUtils.hasText(properties.getGemini().getApiKey());
+    }
+
+    private boolean openAiEnabled() {
+        return "openai".equalsIgnoreCase(properties.getProvider())
+                && StringUtils.hasText(properties.getOpenai().getApiKey());
     }
 }

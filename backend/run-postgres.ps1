@@ -27,4 +27,10 @@ $env:DATABASE_USERNAME = if ($env:DATABASE_USERNAME) { $env:DATABASE_USERNAME } 
 $env:DATABASE_PASSWORD = if ($env:DATABASE_PASSWORD) { $env:DATABASE_PASSWORD } else { "memoris" }
 $env:JWT_SECRET = if ($env:JWT_SECRET) { $env:JWT_SECRET } else { "dev-only-change-this-secret-before-production-64-characters-minimum" }
 
-& "$PSScriptRoot\mvn-local.ps1" spring-boot:run
+$jar = Join-Path $PSScriptRoot "target\memoris-backend-0.1.0.jar"
+$useJar = $env:MEMORIS_USE_JAR -eq "true"
+if ($useJar -and (Test-Path $jar)) {
+    & java -jar $jar
+} else {
+    & "$PSScriptRoot\mvn-local.ps1" spring-boot:run
+}

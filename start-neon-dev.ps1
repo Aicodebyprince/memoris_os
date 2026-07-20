@@ -2,6 +2,20 @@ $Root = $PSScriptRoot
 $Logs = Join-Path $Root ".logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 
+function Normalize-ProcessPathVariable {
+    $pathValue = [Environment]::GetEnvironmentVariable("Path", "Process")
+    if (-not $pathValue) {
+        $pathValue = [Environment]::GetEnvironmentVariable("PATH", "Process")
+    }
+
+    [Environment]::SetEnvironmentVariable("PATH", $null, "Process")
+    if ($pathValue) {
+        [Environment]::SetEnvironmentVariable("Path", $pathValue, "Process")
+    }
+}
+
+Normalize-ProcessPathVariable
+
 function Stop-OldMemorisProcess {
     param([string] $PidFile)
 

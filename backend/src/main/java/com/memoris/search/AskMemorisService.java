@@ -5,6 +5,8 @@ import com.memoris.ai.MemorisAiService;
 import com.memoris.common.CurrentUser;
 import com.memoris.knowledge.Decision;
 import com.memoris.knowledge.DecisionRepository;
+import com.memoris.knowledge.DocumentChunkHit;
+import com.memoris.knowledge.DocumentChunkRepository;
 import com.memoris.knowledge.Meeting;
 import com.memoris.knowledge.MeetingRepository;
 import com.memoris.organization.OrganizationRepository;
@@ -28,6 +30,7 @@ public class AskMemorisService {
     private final OrganizationRepository organizationRepository;
     private final AppUserRepository userRepository;
     private final MemorisAiService aiService;
+    private final DocumentChunkRepository documentChunkRepository;
 
     public AskMemorisService(
             MeetingRepository meetingRepository,
@@ -35,7 +38,8 @@ public class AskMemorisService {
             TimelineEventRepository timelineEventRepository,
             OrganizationRepository organizationRepository,
             AppUserRepository userRepository,
-            MemorisAiService aiService
+            MemorisAiService aiService,
+            DocumentChunkRepository documentChunkRepository
     ) {
         this.meetingRepository = meetingRepository;
         this.decisionRepository = decisionRepository;
@@ -43,6 +47,7 @@ public class AskMemorisService {
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
         this.aiService = aiService;
+        this.documentChunkRepository = documentChunkRepository;
     }
 
     @Transactional
@@ -55,6 +60,17 @@ public class AskMemorisService {
         String teamScope = currentUser.role() == Role.OWNER || currentUser.role() == Role.ADMIN ? null : currentUser.team();
         List<Evidence> evidence = new ArrayList<>();
         List<EvidenceContext> authorizedContext = new ArrayList<>();
+        List<DocumentChunkHit> chunkHits = documentChunkRepository.search(
+                currentUser.organizationId(),
+                teamScope,
+                aiService.embed(question),
+                5
+        );
+        chunkHits.forEach(hit -> {
+            Evidence item = new Evidence("Document", hit.documentId(), hit.documentTitle(), hit.content());
+            evidence.add(item);
+            authorizedContext.add(new EvidenceContext(item.type(), item.id(), item.title(), item.excerpt()));
+        });
         List<Decision> decisions = decisionRepository.search(currentUser.organizationId(), teamScope, keyword(lower));
         decisions.stream().limit(3).forEach(decision -> {
             Evidence item = new Evidence("Decision", decision.getId(), decision.getTitle(), decision.getRationale());

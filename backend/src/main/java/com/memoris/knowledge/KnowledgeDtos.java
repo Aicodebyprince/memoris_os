@@ -23,6 +23,16 @@ public class KnowledgeDtos {
     ) {
     }
 
+    public record DocumentUploadRequest(
+            @NotBlank String filename,
+            @NotBlank String contentBase64,
+            String contentType,
+            Long sizeBytes,
+            String projectName,
+            String team
+    ) {
+    }
+
     public record ProcessMeetingResponse(
             UUID meetingId,
             String summary,

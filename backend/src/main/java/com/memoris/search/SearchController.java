@@ -1,7 +1,10 @@
 package com.memoris.search;
 
+import com.memoris.ai.MemorisAiService;
 import com.memoris.common.CurrentUser;
 import com.memoris.knowledge.DecisionRepository;
+import com.memoris.knowledge.DocumentChunkHit;
+import com.memoris.knowledge.DocumentChunkRepository;
 import com.memoris.knowledge.KnowledgeDocumentRepository;
 import com.memoris.knowledge.MeetingRepository;
 import com.memoris.organization.OrganizationRepository;
@@ -29,6 +32,8 @@ public class SearchController {
     private final TimelineEventRepository timelineEventRepository;
     private final OrganizationRepository organizationRepository;
     private final AppUserRepository userRepository;
+    private final DocumentChunkRepository documentChunkRepository;
+    private final MemorisAiService aiService;
 
     public SearchController(
             MeetingRepository meetingRepository,
@@ -36,7 +41,9 @@ public class SearchController {
             DecisionRepository decisionRepository,
             TimelineEventRepository timelineEventRepository,
             OrganizationRepository organizationRepository,
-            AppUserRepository userRepository
+            AppUserRepository userRepository,
+            DocumentChunkRepository documentChunkRepository,
+            MemorisAiService aiService
     ) {
         this.meetingRepository = meetingRepository;
         this.documentRepository = documentRepository;
@@ -44,6 +51,8 @@ public class SearchController {
         this.timelineEventRepository = timelineEventRepository;
         this.organizationRepository = organizationRepository;
         this.userRepository = userRepository;
+        this.documentChunkRepository = documentChunkRepository;
+        this.aiService = aiService;
     }
 
     @GetMapping
@@ -53,6 +62,14 @@ public class SearchController {
                 ? null
                 : currentUser.team();
         List<SearchResult> results = new ArrayList<>();
+        List<DocumentChunkHit> chunkHits = documentChunkRepository.search(
+                currentUser.organizationId(),
+                teamScope,
+                aiService.embed(q),
+                6
+        );
+        chunkHits.forEach(hit ->
+                results.add(new SearchResult("Document", hit.documentId(), hit.documentTitle(), hit.content(), hit.team(), roundScore(hit.score()))));
         meetingRepository.search(currentUser.organizationId(), teamScope, q).forEach(meeting ->
                 results.add(new SearchResult("Meeting", meeting.getId(), meeting.getTitle(), meeting.getSummary(), meeting.getTeam(), 0.94)));
         decisionRepository.search(currentUser.organizationId(), teamScope, q).forEach(decision ->
@@ -95,5 +112,9 @@ public class SearchController {
             String team,
             double score
     ) {
+    }
+
+    private double roundScore(double score) {
+        return Math.max(0.45, Math.min(0.99, Math.round(score * 100.0) / 100.0));
     }
 }
