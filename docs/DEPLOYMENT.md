@@ -1,119 +1,223 @@
-# Memoris OS Deployment
+# Deployment
 
-This is the clean live setup:
+Current production-style demo setup:
 
-- Frontend: Vercel
-- Backend: Render or Railway
-- Database: Neon PostgreSQL
-- AI: Gemini first, local fallback while no key is configured
-
-## 1. Local Final Check
-
-```powershell
-cd C:\Users\princ\OneDrive\Desktop\Memoris_OS\memoris-os-enterprise
-powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+```text
+Frontend: Vercel
+Backend: AWS EC2 Ubuntu
+Reverse proxy: Nginx
+Database: Neon PostgreSQL + pgvector
+AI provider: Gemini, with OpenAI-ready configuration and local fallback
 ```
 
-Open:
+## URLs
 
-- Frontend: `http://127.0.0.1:5173/`
-- Backend health: `http://localhost:8080/api/health`
+Frontend:
 
-The dashboard should show:
+```text
+https://memorisos.vercel.app
+```
 
-- Backend: `Connected`
-- Signed In: `Prince Owner` or one seeded demo user
-- AI Provider: `Local AI` unless Gemini is configured
+Health check through Vercel proxy:
 
-## 2. Backend Environment Variables
+```text
+https://memorisos.vercel.app/api/health
+```
 
-Set these on Render/Railway:
+Backend health through EC2/Nginx:
+
+```text
+http://98.90.196.6/api/health
+```
+
+## Backend EC2 Setup
+
+Install packages:
+
+```bash
+sudo apt update
+sudo apt install -y openjdk-21-jdk git nginx unzip curl maven
+```
+
+Clone repo:
+
+```bash
+cd ~
+git clone https://github.com/Aicodebyprince/memoris_os.git
+cd memoris_os/backend
+```
+
+Create `.env`:
 
 ```env
 SPRING_PROFILES_ACTIVE=production
 PORT=8080
 
-DATABASE_URL=jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require
-DATABASE_USERNAME=YOUR_NEON_USER
-DATABASE_PASSWORD=YOUR_NEON_PASSWORD
+DATABASE_URL='jdbc:postgresql://YOUR_NEON_HOST/YOUR_DATABASE?sslmode=require&channel_binding=require'
+DATABASE_USERNAME=YOUR_NEON_USERNAME
+DATABASE_PASSWORD='YOUR_NEON_PASSWORD'
 
-JWT_SECRET=YOUR_LONG_RANDOM_SECRET_64_PLUS_CHARS
+JWT_SECRET='replace-with-a-long-random-64-plus-character-secret'
 JWT_EXPIRES_MINUTES=720
 
-CORS_ALLOWED_ORIGINS=https://YOUR_VERCEL_APP.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+CORS_ALLOWED_ORIGINS=https://memorisos.vercel.app,http://98.90.196.6,http://localhost:5173,http://127.0.0.1:5173
 DEMO_SEED_ENABLED=true
 
 AI_PROVIDER=gemini
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+AI_EMBEDDING_DIMENSIONS=768
+GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
 GEMINI_MODEL=gemini-3.5-flash
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Use `AI_PROVIDER=local` until you have the Gemini key. Use `DEMO_SEED_ENABLED=true` for the public demo app so the three demo organizations are created in Neon.
+Important: quote the `DATABASE_URL` because the Neon URL contains `&`.
 
-## 3. Backend Build Settings
-
-Native Java deployment:
+Build backend:
 
 ```bash
-cd backend
 mvn -DskipTests package
-java -jar target/memoris-backend-0.1.0.jar
 ```
 
-Render/Railway commands:
+## systemd Service
 
-- Build command: `cd backend && mvn -DskipTests package`
-- Start command: `cd backend && java -jar target/memoris-backend-0.1.0.jar`
+Create service:
 
-Docker deployment is also ready with `backend/Dockerfile`.
-
-## 4. Frontend Environment Variables
-
-Set this on Vercel:
-
-```env
-VITE_API_BASE_URL=https://YOUR_BACKEND_URL
+```bash
+sudo nano /etc/systemd/system/memoris.service
 ```
 
-Local frontend can use:
+Paste:
 
-```env
-VITE_API_BASE_URL=http://localhost:8080
+```ini
+[Unit]
+Description=Memoris OS Spring Boot Backend
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/memoris_os/backend
+EnvironmentFile=/home/ubuntu/memoris_os/backend/.env
+ExecStart=/usr/bin/java -jar /home/ubuntu/memoris_os/backend/target/memoris-backend-0.1.0.jar
+Restart=always
+RestartSec=10
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-If this value is empty locally, Vite will use its `/api` proxy.
+Enable and start:
 
-## 5. Frontend Build Settings
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable memoris
+sudo systemctl start memoris
+sudo systemctl status memoris --no-pager
+```
 
-Vercel settings:
+Logs:
 
-- Root directory: `frontend`
-- Build command: `npm run build`
-- Output directory: `dist`
+```bash
+journalctl -u memoris -f
+```
 
-## 6. What To Give Codex/User For Live Setup
+Restart after changing `.env` or rebuilding:
 
-Needed values:
+```bash
+sudo systemctl restart memoris
+```
 
-- GitHub repo URL after pushing this project
-- Neon database connection details
-- Render/Railway backend URL after first deploy
-- Vercel frontend URL after first deploy
-- Gemini API key
+## Nginx Proxy
 
-After the backend is live, update:
+Create config:
 
-- Backend `CORS_ALLOWED_ORIGINS` with the real Vercel URL
-- Frontend `VITE_API_BASE_URL` with the real backend URL
+```bash
+sudo nano /etc/nginx/sites-available/memoris
+```
 
-## 7. Live Smoke Test
+Paste:
 
-1. Open `https://YOUR_BACKEND_URL/api/health`.
-2. Confirm JSON has `"status":"ok"`.
-3. Open the Vercel frontend.
-4. Click `Check API`.
-5. Click `Owner`.
-6. Process a transcript.
-7. Search `PostgreSQL`.
-8. Ask `Why did we choose PostgreSQL?`.
-9. Switch to `Employee` and ask a salary/HR question; it should deny permission.
+```nginx
+server {
+    listen 80;
+    server_name 98.90.196.6;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/memoris /etc/nginx/sites-enabled/memoris
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## AWS Security Group
+
+Keep:
+
+```text
+HTTP 80 from 0.0.0.0/0
+HTTPS 443 from 0.0.0.0/0
+SSH 22 from My IP
+```
+
+Do not keep public `8080` open after Nginx proxy works.
+
+## Vercel Setup
+
+Project settings:
+
+```text
+Framework Preset: Vite
+Root Directory: frontend
+Build Command: npm run build
+Output Directory: dist
+Install Command: npm install
+```
+
+Do not set `VITE_API_BASE_URL` in Vercel. The frontend should call relative `/api` routes.
+
+`frontend/vercel.json` proxies API traffic:
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://98.90.196.6/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+## Smoke Test
+
+1. Open `https://memorisos.vercel.app/api/health`.
+2. Confirm it returns `{"status":"ok"}`.
+3. Open `https://memorisos.vercel.app`.
+4. Sign in as `owner@memoris.dev` / `password123`.
+5. Go to Knowledge and upload `sample-data/pdf/memoris-architecture-tech-stack.pdf`.
+6. Ask `Why did we choose PostgreSQL and pgvector for Memoris OS?`.
+7. Confirm the answer includes evidence.
+8. Sign out and sign in as `employee@memoris.dev`.
+9. Ask `Show me the CEO salary discussion.`
+10. Confirm access is denied.

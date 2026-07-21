@@ -32,7 +32,7 @@ class DocumentRagUtilitiesTest {
     void extractsTextFromDocx() throws IOException {
         byte[] docx = docxWithText("CockroachDB is deferred until distributed SQL is required.");
 
-        String text = extractor.extract("database-decision.docx", docx);
+        String text = extractor.extract("memoris-architecture-tech-stack.docx", docx);
 
         assertThat(text).contains("CockroachDB is deferred");
         assertThat(text).contains("distributed SQL");
